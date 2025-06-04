@@ -84,16 +84,21 @@ def app_callback(pad, info, user_data):
 
         # Calculate bounding box center
         x_min = bbox.xmin()
-        box_width = bbox.width()
-        x_max = x_min + box_width
+        #box_width = bbox.width()
+        #x_max = x_min + box_width
+        
+        x_max = bbox.xmax()
+
         center_x = (x_min + x_max) / 2
+        # NOTE y coordinate is not used in this example, but can be used for vertical tracking if needed
 
         # Determine location
         if center_x < user_data.zone_x_min:
             obj_location = "LEFT"
         elif center_x > user_data.zone_x_max:
             obj_location = "RIGHT"
-        else:
+        elif user_data.zone_x_min <= center_x <= user_data.zone_x_max:
+            # If the object is within the middle zone, we can further refine the location based on its width
             obj_location = "MIDDLE"
 
         visible_objects.append((label, track_id, obj_location))
@@ -128,76 +133,6 @@ def app_callback(pad, info, user_data):
 
     # Parse the detections
     detection_count = 0
-    for detection in detections:
-        # Output of cameras vision
-        label = detection.get_label()
-        bbox = detection.get_bbox() # xmin, ymin, width, height (coordinates for bounding box)        
-        confidence = detection.get_confidence()
-
-        detection_count = 0
-        track_id = 0
-        track = detection.get_objects_typed(hailo.HAILO_UNIQUE_ID)
-        if len(track) == 1:
-            track_id = track[0].get_id()
-
-        string_object_id = f"ID: {track_id}" if track_id else "No ID"
-        
-
-        # Use rectangle coordinates to draw the outline of that object
-        x_min = bbox.xmin()
-        y_min = bbox.ymin()
-        box_width = bbox.width()
-        box_height = bbox.height()
-
-        # Calculate max coordinates
-        x_max = x_min + box_width
-        y_max = y_min + box_height
-
-        # Calculate the center of the bounding box
-        center_x = (x_min + x_max) / 2
-        center_y = (y_min + y_max) / 2
-
-        
-        # Which location the object is in (left, middle, right)
-        if center_x < user_data.zone_x_min:
-            location = "left"
-        elif center_x > user_data.zone_x_max:
-            location = "right"
-        else:
-            location = "middle"
-        # NOTE center_y is not used since ymin and ymax are always 0 and 1 respectively
-
-    # Set the string to print based on the location of the object after at least 4 frames of detection
-    if location == "left":
-        user_data.left_object_detected_frames += 1
-        user_data.middle_object_detected_frames = 0
-        user_data.right_object_detected_frames = 0
-        if user_data.left_object_detected_frames >= 4:
-            string_object_location = "left"
-            user_data.path_isClear = False # subject to change
-    elif location == "middle":
-        user_data.middle_object_detected_frames += 1
-        user_data.left_object_detected_frames = 0
-        user_data.right_object_detected_frames = 0
-        if user_data.middle_object_detected_frames >= 4:
-            string_object_location = "middle"
-            user_data.path_isClear = False # same as above
-    elif location == "right":
-        user_data.right_object_detected_frames += 1
-        user_data.left_object_detected_frames = 0
-        user_data.middle_object_detected_frames = 0
-        if user_data.right_object_detected_frames >= 4:
-            string_object_location = "right"
-            user_data.path_isClear = False # same as above
-    else:
-        # No object detected in the path
-        user_data.left_object_detected_frames = 0
-        user_data.middle_object_detected_frames = 0
-        user_data.right_object_detected_frames = 0
-        user_data.no_object_detected_frames += 1
-        if user_data.no_object_detected_frames >= 4:
-            string_object_location = "no object detected"
-            user_data.path_isClear = True
     
         #---------------------------------------------- prints to shell (command line)       
     if user_data.use_frame:
