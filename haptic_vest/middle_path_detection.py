@@ -56,25 +56,24 @@ def app_callback(pad, info, user_data):
 
     # Using the user_data to count the number of frames
     user_data.increment()
-    string_to_print = ""
     path_state_to_print = None  # Track if we need to print
 
     # Get the caps from the pad
     format, width, height = get_caps_from_pad(pad)
 
     # If the user_data.use_frame is set to True, we can get the video frame from the buffer
-    #frame = None
+    frame = None
     if user_data.use_frame and format is not None and width is not None and height is not None:
         # Get video frame
         frame = get_numpy_from_buffer(buffer, format, width, height)
-
+        #----------------------------------------------- not working 
         # Draw the detection area (user's path) as a rectangle
         x1 = int(user_data.zone_x_min * width)
         y1 = int(user_data.zone_y_min * height)
         x2 = int(user_data.zone_x_max * width)
         y2 = int(user_data.zone_y_max * height)
         cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)  # Blue box, thickness 2
-
+        #-----------------------------------------------
     # Get the detections from the buffer
     roi = hailo.get_roi_from_buffer(buffer)
     detections = roi.get_objects_typed(hailo.HAILO_DETECTION)
@@ -142,8 +141,6 @@ def app_callback(pad, info, user_data):
         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         user_data.set_frame(frame)
 
-    if string_to_print:
-        print(string_to_print)
     return Gst.PadProbeReturn.OK
     #---------------------------------------------
 if __name__ == "__main__":

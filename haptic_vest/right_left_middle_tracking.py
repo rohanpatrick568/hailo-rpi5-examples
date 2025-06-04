@@ -21,30 +21,26 @@ class user_app_callback_class(app_callback_class):
     def __init__(self):
         super().__init__()
         
-        # User path (normalized coordinates 0-1)
+        # Divide camera view into zones (normalized coordinates 0-1)
         self.zone_x_min = .33 
         self.zone_x_max = .66
         self.zone_y_min = 0
-        self.zone_y_max = 1
-
-        # Object detection state
-        self.object_detected = False  # Flag to indicate if an object is detected in the user's path
+        self.zone_y_max = 1  
 
         # Debouncing variables
-        self.object_detected_frames = 0 # Number of frames with object detected
-        self.no_object_detected_frames = 0 # Number of frames with no object detected
+        self.left_object_detected_frames = 0 
+        self.middle_object_detected_frames = 0
+        self.right_object_detected_frames = 0
+        self.no_object_detected_frames = 0  # Number of frames with no object detected
 
         # State tracking (users path is either clear or not)
         self.path_isClear = True  # True if the path is clear, False if there is an object in the path
 
         self.last_printed_path_state = None  # Track last printed state
 
-    def new_function(self):  # New function example
-        return "The meaning of life is: "
-
 # -----------------------------------------------------------------------------------------------
 # User-defined callback function
-# -----------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------------------------  
 
 # This is the callback function that will be called when data is available from the pipeline
 def app_callback(pad, info, user_data):
@@ -53,32 +49,30 @@ def app_callback(pad, info, user_data):
     # Check if the buffer is valid
     if buffer is None:
         return Gst.PadProbeReturn.OK
-
+    
     # Using the user_data to count the number of frames
     user_data.increment()
-    string_to_print = ""
-    path_state_to_print = None  # Track if we need to print
+    string_object_location = None
 
     # Get the caps from the pad
     format, width, height = get_caps_from_pad(pad)
 
-    # If the user_data.use_frame is set to True, we can get the video frame from the buffer
-    #frame = None
+    # If the user_data.use_frame is set to True, we will use the frame from the buffer
+    frame = None
     if user_data.use_frame and format is not None and width is not None and height is not None:
-        # Get video frame
+        # Get the numpy array from the buffer
         frame = get_numpy_from_buffer(buffer, format, width, height)
 
     # Get the detections from the buffer
-    roi = hailo.get_roi_from_buffer(buffer)
+    roi = hailo.get_detections_from_buffer(buffer)
     detections = roi.get_objects_typed(hailo.HAILO_DETECTION)
 
     # Parse the detections
     detection_count = 0
-    object_in_path = False  # Track if any detection is in the path
     for detection in detections:
         # Output of cameras vision
         label = detection.get_label()
-        bbox = detection.get_bbox() # coordinates for box (bounded box)
+        bbox = detection.get_bbox() # xmin, ymin, width, height (coordinates for bounding box)        
         confidence = detection.get_confidence()
 
         # Use rectangle coordinates to draw the outline of that object
@@ -91,41 +85,53 @@ def app_callback(pad, info, user_data):
         x_max = x_min + box_width
         y_max = y_min + box_height
 
-        # Path box coordinates (absolute) (objects box)
-        path_x_min = user_data.zone_x_min
-        path_x_max = user_data.zone_x_max
-        path_y_min = user_data.zone_y_min
-        path_y_max = user_data.zone_y_max
+        # Calculate the center of the bounding box
+        center_x = (x_min + x_max) / 2
+        center_y = (y_min + y_max) / 2
 
-        # Check for intersection between object box and path box
-        if not (x_max < path_x_min or x_min > path_x_max or y_max < path_y_min or y_min > path_y_max):
-            object_in_path = True  # Any overlap means object is in the path
+        location = None
+        # Which location the object is in (left, middle, right)
+        if center_x < user_data.zone_x_min:
+            location = "left"
+        elif center_x > user_data.zone_x_max:
+            location = "right"
+        else:
+            location = "middle"
+        # NOTE center_y is not used since ymin and ymax are always 0 and 1 respectively
 
-    user_data.object_detected = object_in_path  # Set after checking all detections
-
-    if user_data.object_detected:
-        # If the path is not clear, increment the object_detected_frames counter
-        user_data.object_detected_frames += 1
-        user_data.no_object_detected_frames = 0
-        # If the object_detected_frames counter exceeds a threshold, print a warning
-        if user_data.object_detected_frames > 5:
-            user_data.path_isClear = False
-            path_state_to_print = "Warning: Object detected in the path!\n"
+    # Set the string to print based on the location of the object after at least 4 frames of detection
+    if location == "left":
+        user_data.left_object_detected_frames += 1
+        user_data.middle_object_detected_frames = 0
+        user_data.right_object_detected_frames = 0
+        if user_data.left_object_detected_frames >= 4:
+            string_object_location = "left"
+            user_data.path_isClear = False # subject to change
+    elif location == "middle":
+        user_data.middle_object_detected_frames += 1
+        user_data.left_object_detected_frames = 0
+        user_data.right_object_detected_frames = 0
+        if user_data.middle_object_detected_frames >= 4:
+            string_object_location = "middle"
+            user_data.path_isClear = False # same as above
+    elif location == "right":
+        user_data.right_object_detected_frames += 1
+        user_data.left_object_detected_frames = 0
+        user_data.middle_object_detected_frames = 0
+        if user_data.right_object_detected_frames >= 4:
+            string_object_location = "right"
+            user_data.path_isClear = False # same as above
     else:
-        # If the path is clear, increment the no_object_detected_frames counter
+        # No object detected in the path
+        user_data.left_object_detected_frames = 0
+        user_data.middle_object_detected_frames = 0
+        user_data.right_object_detected_frames = 0
         user_data.no_object_detected_frames += 1
-        user_data.object_detected_frames = 0
-        # If the no_object_detected_frames counter exceeds a threshold, print a message
-        if user_data.no_object_detected_frames > 5:
+        if user_data.no_object_detected_frames >= 4:
+            string_object_location = "no object detected"
             user_data.path_isClear = True
-            path_state_to_print = "Path is clear!\n"
-
-    # Only print when the state changes or on the first run
-    if path_state_to_print is not None and user_data.last_printed_path_state != user_data.path_isClear:
-        print(path_state_to_print)
-        user_data.last_printed_path_state = user_data.path_isClear
-
-    #---------------------------------------------- prints to shell (command line)       
+    
+        #---------------------------------------------- prints to shell (command line)       
     if user_data.use_frame:
         # Note: using imshow will not work here, as the callback function is not running in the main thread
         # Let's print the detection count to the frame
@@ -137,11 +143,6 @@ def app_callback(pad, info, user_data):
         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         user_data.set_frame(frame)
 
-
-
-
-    if string_to_print:
-        print(string_to_print)
     return Gst.PadProbeReturn.OK
     #---------------------------------------------
 if __name__ == "__main__":
