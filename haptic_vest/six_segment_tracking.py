@@ -24,6 +24,7 @@ class user_app_callback_class(app_callback_class):
         # Divide camera view into zones (normalized coordinates 0-1)
         self.zone_x_min = .33 
         self.zone_x_max = .66
+        self.zone_y = 0.5  # Middle zone is defined by a horizontal line at y=0.5 (normalized)
 
         # Debouncing variables
         self.left_object_detected_frames = 0 
@@ -73,11 +74,14 @@ def app_callback(pad, info, user_data):
             track_id = track[0].get_id()
 
         # Calculate bounding box center
-        x_min = bbox.xmin() 
+        x_min = bbox.xmin()
         x_max = bbox.xmax()
 
+        y_min = bbox.ymin()
+        y_max = bbox.ymax()
+
         center_x = (x_min + x_max) / 2
-        # NOTE y coordinate is not used in this example, but can be used for vertical tracking if needed
+        center_y = (y_min + y_max) / 2 
 
         # Determine location
         if center_x < user_data.zone_x_min:
@@ -87,6 +91,15 @@ def app_callback(pad, info, user_data):
         elif user_data.zone_x_min <= center_x <= user_data.zone_x_max:
             # If the object is within the middle zone, we can further refine the location based on its width
             obj_location = "MIDDLE"
+
+        # Determine location
+        if center_y < user_data.zone_y:
+            obj_location += " TOP"
+        elif center_y > user_data.zone_y:
+            obj_location += " BOTTOM"
+        else:
+            obj_location += " MIDDLE"
+
 
         visible_objects.append((label, track_id, obj_location))
         visible_ids.add(track_id)
