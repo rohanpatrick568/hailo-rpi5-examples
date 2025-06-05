@@ -33,11 +33,6 @@ class user_app_callback_class(app_callback_class):
         self.right_object_detected_frames = 0
         self.no_object_detected_frames = 0  # Number of frames with no object detected
 
-        # State tracking (users path is either clear or not)
-        self.path_isClear = True  # True if the path is clear, False if there is an object in the path
-
-        self.last_printed_path_state = None  # Track last printed state
-
         self.current_object_ids = set()  # Track currently visible object IDs
 
 # -----------------------------------------------------------------------------------------------
@@ -54,18 +49,15 @@ def app_callback(pad, info, user_data):
     
     # Using the user_data to count the number of frames
     user_data.increment()
-    string_object_location = None
-    string_object_id = None
-    location = None # NOTE js added
 
     # Get the caps from the pad
     format, width, height = get_caps_from_pad(pad)
 
     # If the user_data.use_frame is set to True, we will use the frame from the buffer
     frame = None
-    if user_data.use_frame and format is not None and width is not None and height is not None:
-        # Get the numpy array from the buffer
-        frame = get_numpy_from_buffer(buffer, format, width, height)
+    # if user_data.use_frame and format is not None and width is not None and height is not None:
+    #     # Get the numpy array from the buffer
+    #     frame = get_numpy_from_buffer(buffer, format, width, height)
 
     # Get the detections from the buffer
     roi = hailo.get_roi_from_buffer(buffer)
@@ -130,22 +122,6 @@ def app_callback(pad, info, user_data):
         else:
             print("No objects in view.")
         user_data.current_object_ids = visible_ids
-
-    # Parse the detections
-    detection_count = 0
-    
-    #     #---------------------------------------------- prints to shell (command line)       
-    # if user_data.use_frame:
-    #     # Note: using imshow will not work here, as the callback function is not running in the main thread
-    #     # Let's print the detection count to the frame
-    #     #cv2.putText(frame, f"Detections: {detection_count}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-    #     # Example of how to use the new_variable and new_function from the user_data
-    #     # Let's print the new_variable and the result of the new_function to the frame
-    #     #cv2.putText(frame, f"{user_data.new_function()} {user_data.new_variable}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-    #     # Convert the frame to BGR
-    #     # if frame is not None:
-    #     #     frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-    #     #     user_data.set_frame(frame)
 
     return Gst.PadProbeReturn.OK
 
